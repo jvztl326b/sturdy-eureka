@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,8 +5,63 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>>.<</title>
   
+  <style>
+    /* This is your CSS inside the HTML file */
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .cat-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      width: 100%;
+      max-width: 800px;
+    }
+
+    img {
+      width: 100%;
+      border-radius: 15px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      transition: transform 0.3s ease;
+    }
+
+    img:hover {
+      transform: scale(1.05);
+    }
+
+    footer {
+      margin-top: 50px;
+      font-size: 2rem;
+    }
+
+    .fade-in {
+      animation: fadeIn ease 2s;
+    }
+
+    @keyframes fadeIn {
+      0% {opacity:0;}
+      100% {opacity:1;}
+    }
+  </style>
 </head>
 <body class="fade-in">
+
+  <h1>My Favorite Cats</h1>
+
+  <div class="cat-container">
+    <img src="https://placekitten.com/300/300" alt="Cute kitten">
+    <img src="https://placekitten.com/301/301" alt="Another kitten">
+    <img src="https://placekitten.com/302/302" alt="Sleepy cat">
+  </div>
+
   <footer>🐧</footer>
+  
 </body>
 </html>
