@@ -1,4 +1,4 @@
-# api/index.py - Flask app for Vercel
+# api/index.py - Vercel-compatible Flask app
 from flask import Flask, request, jsonify
 import time
 import json
@@ -9,7 +9,7 @@ app = Flask(__name__)
 # Store scripts temporarily
 script_store = {}
 
-@app.route('/')
+@app.route('/', methods=['GET'])
 def home():
     return jsonify({
         "status": "open proxy - no auth",
@@ -24,11 +24,12 @@ def home():
         }
     })
 
-@app.route('/execute', methods=['POST', 'GET'])
+@app.route('/execute', methods=['POST', 'GET', 'OPTIONS'])
 def execute_script():
-    """Accept scripts from ANYONE - NO AUTH REQUIRED"""
+    if request.method == 'OPTIONS':
+        return '', 204
+    
     try:
-        # Handle both POST and GET for flexibility
         if request.method == 'GET':
             script = request.args.get('script')
             player = request.args.get('player', 'Unknown')
@@ -40,79 +41,68 @@ def execute_script():
         if not script:
             return jsonify({"error": "No script provided"}), 400
         
-        # Generate ID
         script_id = str(int(time.time() * 1000))
         script_store[script_id] = {
             "script": script,
             "player": player,
-            "timestamp": time.time(),
-            "ip": request.remote_addr or 'unknown'
+            "timestamp": time.time()
         }
-        
-        # Clean old scripts (older than 5 minutes)
-        current_time = time.time()
-        expired = [k for k, v in script_store.items() 
-                  if current_time - v["timestamp"] > 300]
-        for key in expired:
-            del script_store[key]
         
         return jsonify({
             "status": "success",
             "id": script_id,
-            "script": script[:100] + ("..." if len(script) > 100 else ""),
-            "message": "Script stored - anyone can retrieve it"
+            "message": "Script stored"
         })
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/script/<script_id>', methods=['GET'])
+@app.route('/script/<script_id>', methods=['GET', 'OPTIONS'])
 def get_script(script_id):
-    """Retrieve script - NO AUTH REQUIRED"""
+    if request.method == 'OPTIONS':
+        return '', 204
+    
     if script_id in script_store:
         return jsonify(script_store[script_id])
     return jsonify({"error": "Script not found"}), 404
 
-@app.route('/script/<script_id>', methods=['DELETE'])
-def delete_script(script_id):
-    """Delete script - NO AUTH REQUIRED"""
-    if script_id in script_store:
-        del script_store[script_id]
-        return jsonify({"status": "deleted"})
-    return jsonify({"error": "Script not found"}), 404
-
-@app.route('/all', methods=['GET'])
+@app.route('/all', methods=['GET', 'OPTIONS'])
 def list_all():
-    """List all scripts - WARNING: PUBLIC"""
+    if request.method == 'OPTIONS':
+        return '', 204
+    
     return jsonify({
         "count": len(script_store),
         "scripts": {k: {"player": v["player"], "preview": v["script"][:50]} 
                    for k, v in script_store.items()}
     })
 
-@app.route('/clear', methods=['POST'])
+@app.route('/clear', methods=['POST', 'OPTIONS'])
 def clear_all():
-    """Clear all scripts - NO AUTH"""
+    if request.method == 'OPTIONS':
+        return '', 204
+    
     script_store.clear()
     return jsonify({"status": "all scripts cleared"})
 
-@app.route('/status', methods=['GET'])
+@app.route('/status', methods=['GET', 'OPTIONS'])
 def status():
+    if request.method == 'OPTIONS':
+        return '', 204
+    
     return jsonify({
         "status": "open proxy running",
-        "scripts_stored": len(script_store),
-        "uptime": time.time(),
-        "warning": "NO AUTHENTICATION REQUIRED"
+        "scripts_stored": len(script_store)
     })
 
-# CORS headers
+# CORS headers middleware
 @app.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
     return response
 
-# This is required for Vercel
+# Vercel requires this handler
 def handler(event, context):
     return app(event, context)
