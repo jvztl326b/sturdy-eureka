@@ -1,125 +1,119 @@
-# api/index.py - Vercel-compatible Flask app
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+# api/index.py - Minimal working Flask for Vercel
+import json
 import time
 
-# Initialize Flask app
-app = Flask(__name__)
-CORS(app)
+# Simple in-memory storage
+scripts = {}
 
-# Store scripts temporarily
-script_store = {}
-
-@app.route('/', methods=['GET'])
-def home():
-    return jsonify({
-        "status": "Flask Proxy Running on Vercel",
-        "warning": "NO AUTHENTICATION",
-        "endpoints": [
-            "GET  /status",
-            "POST /execute",
-            "GET  /script/<id>",
-            "GET  /all",
-            "POST /clear"
-        ]
-    })
-
-@app.route('/status', methods=['GET'])
-def status():
-    return jsonify({
-        "status": "online",
-        "scripts": len(script_store),
-        "server": "Flask on Vercel"
-    })
-
-@app.route('/execute', methods=['POST'])
-def execute():
-    try:
-        data = request.get_json()
-        script = data.get('script', '')
-        player = data.get('player', 'Unknown')
-        
-        if not script:
-            return jsonify({"error": "No script"}), 400
-        
-        script_id = str(int(time.time() * 1000))
-        script_store[script_id] = {
-            "script": script,
-            "player": player,
-            "time": time.time()
-        }
-        
-        # Clean old scripts (>5 mins)
-        current = time.time()
-        for sid in list(script_store.keys()):
-            if current - script_store[sid]["time"] > 300:
-                del script_store[sid]
-        
-        return jsonify({
-            "id": script_id,
-            "success": True,
-            "message": "Script stored"
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/script/<script_id>', methods=['GET'])
-def get_script(script_id):
-    if script_id in script_store:
-        return jsonify(script_store[script_id])
-    return jsonify({"error": "Not found"}), 404
-
-@app.route('/all', methods=['GET'])
-def all_scripts():
-    scripts = {}
-    for sid, data in script_store.items():
-        scripts[sid] = {
-            "player": data["player"],
-            "preview": data["script"][:50] + ("..." if len(data["script"]) > 50 else "")
-        }
-    
-    return jsonify({
-        "count": len(scripts),
-        "scripts": scripts
-    })
-
-@app.route('/clear', methods=['POST'])
-def clear():
-    script_store.clear()
-    return jsonify({"success": True, "message": "All scripts cleared"})
-
-# Vercel requires this handler
 def handler(event, context):
-    from flask import make_response
-    import json
-    
-    # Parse Vercel event
     path = event.get('path', '/')
     method = event.get('httpMethod', 'GET')
-    query = event.get('queryStringParameters', {}) or {}
-    body = event.get('body', '{}')
-    headers = event.get('headers', {})
     
-    # Create mock request
-    with app.test_request_context(
-        path=path,
-        method=method,
-        query_string=query,
-        data=body,
-        headers=headers
-    ):
-        # Dispatch request
-        response = app.full_dispatch_request()
-        
-        # Return Vercel format
+    # Handle CORS preflight
+    if method == 'OPTIONS':
         return {
-            'statusCode': response.status_code,
+            'statusCode': 204,
             'headers': {
-                'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
                 'Access-Control-Allow-Headers': 'Content-Type'
-            },
-            'body': response.get_data(as_text=True)
+            }
         }
+    
+    # Home endpoint
+    if path == '/':
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({
+                "status": "Flask Proxy Running",
+                "endpoints": ["/execute", "/script/:id", "/all", "/clear", "/status"]
+            })
+        }
+    
+    # Status endpoint
+    if path == '/status' and method == 'GET':
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({
+                "online": True,
+                "scripts": len(scripts)
+            })
+        }
+    
+    # Execute endpoint
+    if path == '/execute' and method == 'POST':
+        try:
+            body = json.loads(event.get('body', '{}'))
+            script = body.get('script', '')
+            player = body.get('player', 'Unknown')
+            
+            script_id = str(int(time.time() * 1000))
+            scripts[script_id] = {
+                "script": script,
+                "player": player,
+                "time": time.time()
+            }
+            
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({
+                    "success": True,
+                    "id": script_id
+                })
+            }
+        except Exception as e:
+            return {
+                'statusCode': 500,
+                'body': json.dumps({"error": str(e)})
+            }
+    
+    # Get script by ID
+    if path.startswith('/script/') and method == 'GET':
+        script_id = path.split('/script/')[1]
+        if script_id in scripts:
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps(scripts[script_id])
+            }
+        else:
+            return {
+                'statusCode': 404,
+                'body': json.dumps({"error": "Not found"})
+            }
+    
+    # List all scripts
+    if path == '/all' and method == 'GET':
+        result = {}
+        for sid, data in scripts.items():
+            result[sid] = {
+                "player": data["player"],
+                "preview": data["script"][:50] + ("..." if len(data["script"]) > 50 else "")
+            }
+        
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({
+                "count": len(result),
+                "scripts": result
+            })
+        }
+    
+    # Clear all scripts
+    if path == '/clear' and method == 'POST':
+        scripts.clear()
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({"success": True})
+        }
+    
+    # 404 for unknown routes
+    return {
+        'statusCode': 404,
+        'body': json.dumps({"error": "Endpoint not found"})
+    }
