@@ -4,7 +4,7 @@ import time
 a = 6
 b = 7 
 c = a + b
-
+print("niger")
 # Simple in-memory storage
 scripts = {}
 
